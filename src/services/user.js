@@ -2,6 +2,7 @@ const logger = require('../utils/logger');
 const databaseService = require('./database');
 const supabaseHelper = require('./supabaseHelper');
 const { supabase } = require('../database/connection');
+const { withPgClient, quoteTable } = require('../database/pgPool');
 const activityLogger = require('./activityLogger');
 const walletService = require('./wallet');
 const crypto = require('crypto');
@@ -401,6 +402,142 @@ class UserService {
     }
   }
 
+  async _deleteRowsInBatches(table, userId, { column = 'userId', batchSize = 250 } = {}) {
+    const deletedViaPg = await withPgClient(async (client) => {
+      if (!client) return null;
+
+      const quotedTable = quoteTable(table);
+      let totalDeleted = 0;
+      let iterations = 0;
+      const maxIterations = 20000;
+
+      while (iterations < maxIterations) {
+        iterations += 1;
+        const result = await client.query(
+          `DELETE FROM ${quotedTable}
+           WHERE id IN (
+             SELECT id FROM ${quotedTable}
+             WHERE "${column}" = $1
+             LIMIT $2
+           )`,
+          [userId, batchSize]
+        );
+
+        totalDeleted += result.rowCount || 0;
+        if ((result.rowCount || 0) < batchSize) break;
+      }
+
+      return totalDeleted;
+    }, { statementTimeoutMs: 120000 });
+
+    if (deletedViaPg !== null) {
+      return deletedViaPg;
+    }
+
+    let totalDeleted = 0;
+    let iterations = 0;
+    const maxIterations = 20000;
+
+    while (iterations < maxIterations) {
+      iterations += 1;
+      const { data, error } = await supabase
+        .from(table)
+        .select('id')
+        .eq(column, userId)
+        .limit(batchSize);
+
+      if (error) throw error;
+      if (!data?.length) break;
+
+      const ids = data.map((row) => row.id);
+      const { error: deleteError } = await supabase.from(table).delete().in('id', ids);
+      if (deleteError) throw deleteError;
+
+      totalDeleted += ids.length;
+      if (data.length < batchSize) break;
+    }
+
+    return totalDeleted;
+  }
+
+  async _clearUserForeignKeyReferences(userId) {
+    const referenceClears = [
+      { table: 'users', column: 'referredBy' },
+      { table: 'wallets', column: 'frozenBy' },
+      { table: 'transactions', column: 'approvedBy' },
+      { table: 'transactions', column: 'rejectedBy' },
+      { table: 'supportTickets', column: 'assignedTo' },
+      { table: 'activityLogs', column: 'adminUserId' },
+      { table: 'activityLogs', column: 'reviewedBy' }
+    ];
+
+    await withPgClient(async (client) => {
+      if (client) {
+        for (const { table, column } of referenceClears) {
+          const quotedTable = quoteTable(table);
+          await client.query(
+            `UPDATE ${quotedTable} SET "${column}" = NULL WHERE "${column}" = $1`,
+            [userId]
+          );
+        }
+
+        await client.query(
+          `UPDATE transactions SET "parentTransactionId" = NULL WHERE "userId" = $1`,
+          [userId]
+        );
+        return;
+      }
+
+      for (const { table, column } of referenceClears) {
+        const { error } = await supabase
+          .from(table)
+          .update({ [column]: null })
+          .eq(column, userId);
+        if (error) throw error;
+      }
+
+      const { error: parentError } = await supabase
+        .from('transactions')
+        .update({ parentTransactionId: null })
+        .eq('userId', userId);
+      if (parentError) throw parentError;
+    }, { statementTimeoutMs: 120000 });
+  }
+
+  async _purgeUserRelatedData(userId) {
+    await this._clearUserForeignKeyReferences(userId);
+
+    const tablesInOrder = [
+      'chatMessages',
+      'notifications',
+      'activityLogs',
+      'virtualCards',
+      'beneficiaries',
+      'bankAccounts',
+      'supportTickets',
+      'transactions'
+    ];
+
+    const purgeSummary = {};
+    for (const table of tablesInOrder) {
+      const batchSize = table === 'transactions' || table === 'activityLogs' ? 200 : 300;
+      const deletedCount = await databaseService.executeWithRetry(
+        () => this._deleteRowsInBatches(table, userId, { batchSize }),
+        3
+      );
+      purgeSummary[table] = deletedCount;
+    }
+
+    const { error: walletError } = await supabase
+      .from('wallets')
+      .delete()
+      .eq('userId', userId);
+    if (walletError) throw walletError;
+
+    logger.info('Purged user related data', { userId, purgeSummary });
+    return purgeSummary;
+  }
+
   async deleteUser(userId, options = {}) {
     const { force = false, deletedBy = null, reason = null } = options;
     
@@ -418,31 +555,6 @@ class UserService {
         throw new Error('User wallet must have zero balance and no pending funds before deletion');
       }
 
-      // Delete related records using Supabase
-      const tablesToDelete = ['virtualCards', 'beneficiaries', 'bankAccounts', 'supportTickets', 'activityLogs', 'transactions'];
-      
-      for (const table of tablesToDelete) {
-        await databaseService.executeWithRetry(async () => {
-          const { error } = await supabase
-            .from(table)
-            .delete()
-            .eq('userId', userId);
-          
-          if (error) throw error;
-        });
-      }
-
-      if (wallet) {
-        await databaseService.executeWithRetry(async () => {
-          const { error } = await supabase
-            .from('wallets')
-            .delete()
-            .eq('id', wallet.id);
-          
-          if (error) throw error;
-        });
-      }
-
       const snapshot = {
         id: user.id,
         whatsappNumber: user.whatsappNumber,
@@ -451,20 +563,9 @@ class UserService {
         email: user.email
       };
 
-      // Delete user
-      await databaseService.executeWithRetry(async () => {
-        const { error } = await supabase
-          .from('users')
-          .delete()
-          .eq('id', userId);
-        
-        if (error) throw error;
-      });
-
-      // Log activity
       await activityLogger.logAdminAction(
-        deletedBy || userId,
-        'user_deleted',
+        deletedBy || null,
+        userId,
         reason || 'User account permanently deleted by admin',
         {
           deletedBy,
@@ -473,6 +574,21 @@ class UserService {
           userSnapshot: snapshot
         }
       );
+
+      await this._purgeUserRelatedData(userId);
+
+      await withPgClient(async (client) => {
+        if (client) {
+          const result = await client.query('DELETE FROM users WHERE id = $1', [userId]);
+          if ((result.rowCount || 0) === 0) {
+            throw new Error('User not found or no changes made');
+          }
+          return;
+        }
+
+        const { error } = await supabase.from('users').delete().eq('id', userId);
+        if (error) throw error;
+      }, { statementTimeoutMs: 120000 });
 
       logger.info('User deleted successfully', { userId, deletedBy, force });
       return snapshot;
