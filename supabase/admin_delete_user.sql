@@ -16,12 +16,47 @@ BEGIN
 
   UPDATE users SET "referredBy" = NULL WHERE "referredBy" = target_user_id;
   UPDATE wallets SET "frozenBy" = NULL WHERE "frozenBy" = target_user_id;
-  UPDATE transactions SET "approvedBy" = NULL WHERE "approvedBy" = target_user_id;
-  UPDATE transactions SET "rejectedBy" = NULL WHERE "rejectedBy" = target_user_id;
   UPDATE "supportTickets" SET "assignedTo" = NULL WHERE "assignedTo" = target_user_id;
-  UPDATE "activityLogs" SET "adminUserId" = NULL WHERE "adminUserId" = target_user_id;
-  UPDATE "activityLogs" SET "reviewedBy" = NULL WHERE "reviewedBy" = target_user_id;
-  UPDATE transactions SET "parentTransactionId" = NULL WHERE "userId" = target_user_id;
+
+  -- Batch wide updates so a single statement does not hit statement_timeout
+  LOOP
+    UPDATE transactions SET "approvedBy" = NULL
+    WHERE id IN (SELECT id FROM transactions WHERE "approvedBy" = target_user_id LIMIT batch_size);
+    GET DIAGNOSTICS n = ROW_COUNT;
+    EXIT WHEN n = 0;
+  END LOOP;
+
+  LOOP
+    UPDATE transactions SET "rejectedBy" = NULL
+    WHERE id IN (SELECT id FROM transactions WHERE "rejectedBy" = target_user_id LIMIT batch_size);
+    GET DIAGNOSTICS n = ROW_COUNT;
+    EXIT WHEN n = 0;
+  END LOOP;
+
+  LOOP
+    UPDATE "activityLogs" SET "adminUserId" = NULL
+    WHERE id IN (SELECT id FROM "activityLogs" WHERE "adminUserId" = target_user_id LIMIT batch_size);
+    GET DIAGNOSTICS n = ROW_COUNT;
+    EXIT WHEN n = 0;
+  END LOOP;
+
+  LOOP
+    UPDATE "activityLogs" SET "reviewedBy" = NULL
+    WHERE id IN (SELECT id FROM "activityLogs" WHERE "reviewedBy" = target_user_id LIMIT batch_size);
+    GET DIAGNOSTICS n = ROW_COUNT;
+    EXIT WHEN n = 0;
+  END LOOP;
+
+  LOOP
+    UPDATE transactions SET "parentTransactionId" = NULL
+    WHERE id IN (
+      SELECT id FROM transactions
+      WHERE "userId" = target_user_id AND "parentTransactionId" IS NOT NULL
+      LIMIT batch_size
+    );
+    GET DIAGNOSTICS n = ROW_COUNT;
+    EXIT WHEN n = 0;
+  END LOOP;
 
   LOOP
     DELETE FROM "chatMessages" cm
@@ -34,11 +69,24 @@ BEGIN
   END LOOP;
 
   LOOP
-    DELETE FROM notifications n
+    DELETE FROM notifications notif
     USING (SELECT id FROM notifications WHERE "userId" = target_user_id LIMIT batch_size) batch
-    WHERE n.id = batch.id;
+    WHERE notif.id = batch.id;
     GET DIAGNOSTICS n = ROW_COUNT;
-  EXIT WHEN n = 0;
+    EXIT WHEN n = 0;
+  END LOOP;
+
+  -- Clear activity logs tied to this user's transactions before deleting transactions
+  LOOP
+    UPDATE "activityLogs" al SET "relatedTransactionId" = NULL
+    WHERE al.id IN (
+      SELECT al2.id FROM "activityLogs" al2
+      INNER JOIN transactions t ON t.id = al2."relatedTransactionId"
+      WHERE t."userId" = target_user_id
+      LIMIT batch_size
+    );
+    GET DIAGNOSTICS n = ROW_COUNT;
+    EXIT WHEN n = 0;
   END LOOP;
 
   LOOP
@@ -98,3 +146,7 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION admin_delete_user(UUID) TO service_role;
+GRANT EXECUTE ON FUNCTION admin_delete_user(UUID) TO postgres;
+
+-- Refresh PostgREST schema cache so the API sees the function immediately
+NOTIFY pgrst, 'reload schema';

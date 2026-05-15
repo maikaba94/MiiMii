@@ -487,7 +487,16 @@ class UserService {
     const { data, error } = await supabase.rpc('admin_delete_user', {
       target_user_id: userId
     });
-    if (error) throw error;
+    if (error) {
+      logger.error('admin_delete_user RPC error', {
+        userId,
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint
+      });
+      throw error;
+    }
     return data;
   }
 
@@ -562,12 +571,37 @@ class UserService {
         }
       );
 
+      // Prefer Supabase DB function (runs inside Postgres with extended timeout).
+      // Client-side batched deletes hit PostgREST statement_timeout on large accounts.
+      try {
+        await this._deleteUserViaSupabaseRpc(userId);
+        logger.info('User deleted via admin_delete_user RPC', { userId, deletedBy, force });
+        return snapshot;
+      } catch (rpcError) {
+        if (!this._isMissingRpcError(rpcError)) {
+          logger.error('admin_delete_user RPC failed', {
+            userId,
+            error: rpcError.message,
+            code: rpcError.code
+          });
+          throw new Error(
+            rpcError.message?.includes('statement timeout')
+              ? 'Account deletion timed out. Run supabase/admin_delete_user.sql in Supabase SQL Editor, then retry.'
+              : rpcError.message
+          );
+        }
+        logger.warn('admin_delete_user RPC not found — using batched Supabase API fallback', {
+          userId,
+          hint: 'Run supabase/admin_delete_user.sql in Supabase SQL Editor for reliable deletes'
+        });
+      }
+
       await this._purgeUserRelatedData(userId);
 
       const { error: deleteUserError } = await supabase.from('users').delete().eq('id', userId);
       if (deleteUserError) throw deleteUserError;
 
-      logger.info('User deleted successfully', { userId, deletedBy, force });
+      logger.info('User deleted successfully (batched API fallback)', { userId, deletedBy, force });
       return snapshot;
     } catch (error) {
       logger.error('Failed to delete user', { error: error.message, userId, deletedBy, force });
