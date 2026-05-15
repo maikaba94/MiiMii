@@ -2,7 +2,6 @@ const logger = require('../utils/logger');
 const databaseService = require('./database');
 const supabaseHelper = require('./supabaseHelper');
 const { supabase } = require('../database/connection');
-const { withPgClient, quoteTable } = require('../database/pgPool');
 const activityLogger = require('./activityLogger');
 const walletService = require('./wallet');
 const crypto = require('crypto');
@@ -403,37 +402,6 @@ class UserService {
   }
 
   async _deleteRowsInBatches(table, userId, { column = 'userId', batchSize = 250 } = {}) {
-    const deletedViaPg = await withPgClient(async (client) => {
-      if (!client) return null;
-
-      const quotedTable = quoteTable(table);
-      let totalDeleted = 0;
-      let iterations = 0;
-      const maxIterations = 20000;
-
-      while (iterations < maxIterations) {
-        iterations += 1;
-        const result = await client.query(
-          `DELETE FROM ${quotedTable}
-           WHERE id IN (
-             SELECT id FROM ${quotedTable}
-             WHERE "${column}" = $1
-             LIMIT $2
-           )`,
-          [userId, batchSize]
-        );
-
-        totalDeleted += result.rowCount || 0;
-        if ((result.rowCount || 0) < batchSize) break;
-      }
-
-      return totalDeleted;
-    }, { statementTimeoutMs: 120000 });
-
-    if (deletedViaPg !== null) {
-      return deletedViaPg;
-    }
-
     let totalDeleted = 0;
     let iterations = 0;
     const maxIterations = 20000;
@@ -471,37 +439,19 @@ class UserService {
       { table: 'activityLogs', column: 'reviewedBy' }
     ];
 
-    await withPgClient(async (client) => {
-      if (client) {
-        for (const { table, column } of referenceClears) {
-          const quotedTable = quoteTable(table);
-          await client.query(
-            `UPDATE ${quotedTable} SET "${column}" = NULL WHERE "${column}" = $1`,
-            [userId]
-          );
-        }
+    for (const { table, column } of referenceClears) {
+      const { error } = await supabase
+        .from(table)
+        .update({ [column]: null })
+        .eq(column, userId);
+      if (error) throw error;
+    }
 
-        await client.query(
-          `UPDATE transactions SET "parentTransactionId" = NULL WHERE "userId" = $1`,
-          [userId]
-        );
-        return;
-      }
-
-      for (const { table, column } of referenceClears) {
-        const { error } = await supabase
-          .from(table)
-          .update({ [column]: null })
-          .eq(column, userId);
-        if (error) throw error;
-      }
-
-      const { error: parentError } = await supabase
-        .from('transactions')
-        .update({ parentTransactionId: null })
-        .eq('userId', userId);
-      if (parentError) throw parentError;
-    }, { statementTimeoutMs: 120000 });
+    const { error: parentError } = await supabase
+      .from('transactions')
+      .update({ parentTransactionId: null })
+      .eq('userId', userId);
+    if (parentError) throw parentError;
   }
 
   async _purgeUserRelatedData(userId) {
@@ -577,18 +527,8 @@ class UserService {
 
       await this._purgeUserRelatedData(userId);
 
-      await withPgClient(async (client) => {
-        if (client) {
-          const result = await client.query('DELETE FROM users WHERE id = $1', [userId]);
-          if ((result.rowCount || 0) === 0) {
-            throw new Error('User not found or no changes made');
-          }
-          return;
-        }
-
-        const { error } = await supabase.from('users').delete().eq('id', userId);
-        if (error) throw error;
-      }, { statementTimeoutMs: 120000 });
+      const { error: deleteUserError } = await supabase.from('users').delete().eq('id', userId);
+      if (deleteUserError) throw deleteUserError;
 
       logger.info('User deleted successfully', { userId, deletedBy, force });
       return snapshot;
