@@ -401,7 +401,7 @@ class UserService {
     }
   }
 
-  async _deleteRowsInBatches(table, userId, { column = 'userId', batchSize = 250 } = {}) {
+  async _deleteRowsInBatches(table, userId, { column = 'userId', batchSize = 100 } = {}) {
     let totalDeleted = 0;
     let iterations = 0;
     const maxIterations = 20000;
@@ -428,6 +428,30 @@ class UserService {
     return totalDeleted;
   }
 
+  async _nullifyColumnInBatches(table, column, matchValue, { batchSize = 100, extraNullFields = null } = {}) {
+    let iterations = 0;
+    const maxIterations = 20000;
+
+    while (iterations < maxIterations) {
+      iterations += 1;
+      const { data, error } = await supabase
+        .from(table)
+        .select('id')
+        .eq(column, matchValue)
+        .limit(batchSize);
+
+      if (error) throw error;
+      if (!data?.length) break;
+
+      const ids = data.map((row) => row.id);
+      const patch = extraNullFields || { [column]: null };
+      const { error: updateError } = await supabase.from(table).update(patch).in('id', ids);
+      if (updateError) throw updateError;
+
+      if (data.length < batchSize) break;
+    }
+  }
+
   async _clearUserForeignKeyReferences(userId) {
     const referenceClears = [
       { table: 'users', column: 'referredBy' },
@@ -440,18 +464,31 @@ class UserService {
     ];
 
     for (const { table, column } of referenceClears) {
-      const { error } = await supabase
-        .from(table)
-        .update({ [column]: null })
-        .eq(column, userId);
-      if (error) throw error;
+      await this._nullifyColumnInBatches(table, column, userId, { batchSize: 100 });
     }
 
-    const { error: parentError } = await supabase
-      .from('transactions')
-      .update({ parentTransactionId: null })
-      .eq('userId', userId);
-    if (parentError) throw parentError;
+    await this._nullifyColumnInBatches('transactions', 'userId', userId, {
+      batchSize: 100,
+      extraNullFields: { parentTransactionId: null }
+    });
+  }
+
+  _isMissingRpcError(error) {
+    const message = error?.message || '';
+    const code = error?.code || '';
+    return (
+      code === 'PGRST202' ||
+      /could not find the function/i.test(message) ||
+      /function.*does not exist/i.test(message)
+    );
+  }
+
+  async _deleteUserViaSupabaseRpc(userId) {
+    const { data, error } = await supabase.rpc('admin_delete_user', {
+      target_user_id: userId
+    });
+    if (error) throw error;
+    return data;
   }
 
   async _purgeUserRelatedData(userId) {
