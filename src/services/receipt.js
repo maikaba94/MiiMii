@@ -575,48 +575,20 @@ ctx.drawImage(
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
 
-      // Set background
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, this.scaleValue(400), this.scaleValue(650));
+      // Load custom receipt template
+const receiptTemplate = await loadImage(
+  path.join(this.logoPath, 'receipt-template.png')
+);
 
-      // Header
-      ctx.fillStyle = '#ff0000';
-      ctx.fillRect(0, 0, this.scaleValue(400), this.scaleValue(80));
+// Draw the template
+ctx.drawImage(
+  receiptTemplate,
+  0,
+  0,
+  canvas.width,
+  canvas.height
+);
 
-      // Load and draw logo
-      const logo = await this.loadLogo();
-      if (logo) {
-        const logoSize = this.scaleValue(40);
-        const logoX = this.scaleValue(30);
-        const logoY = this.scaleValue(20);
-        ctx.drawImage(logo, logoX, logoY, logoSize, logoSize);
-      } else {
-        ctx.fillStyle = '#ff6666';
-        ctx.beginPath();
-        ctx.arc(this.scaleValue(50), this.scaleValue(40), this.scaleValue(20), 0, 2 * Math.PI);
-        ctx.fill();
-      }
-
-      // MiiMii.AI title
-      ctx.fillStyle = '#ffffff';
-      ctx.font = `bold ${this.scaleValue(24)}px Outfit, Arial`;
-      ctx.textAlign = 'center';
-      ctx.fillText('MiiMii.AI', this.scaleValue(200), this.scaleValue(35));
-
-      // Transaction Receipt title
-      ctx.fillStyle = '#000000';
-      ctx.font = `bold italic ${this.scaleValue(28)}px Outfit, Arial`;
-      ctx.textAlign = 'center';
-      ctx.fillText('Transaction Receipt', this.scaleValue(200), this.scaleValue(120));
-
-      // Generated date
-      ctx.font = `${this.scaleValue(12)}px Outfit, Arial`;
-      ctx.fillStyle = '#666666';
-      ctx.fillText(`Generated from The MiiMii AI on ${date}`, this.scaleValue(200), this.scaleValue(140));
-
-      // Content area background
-      ctx.fillStyle = '#f0f8f0';
-      ctx.fillRect(this.scaleValue(20), this.scaleValue(160), this.scaleValue(360), this.scaleValue(370));
 
       // Transaction details
       const details = [
@@ -631,27 +603,27 @@ ctx.drawImage(
         { label: 'Transaction Status', value: status }
       ];
 
-      let yPos = this.scaleValue(180);
+      let yPos = this.scaleValue(230);
       details.forEach((detail, index) => {
         // Label
         ctx.fillStyle = '#333333';
         ctx.font = `bold ${this.scaleValue(10)}px Outfit, Arial`;
         ctx.textAlign = 'left';
-        ctx.fillText(detail.label, this.scaleValue(40), yPos);
+        ctx.fillText(detail.label, this.scaleValue(55), yPos);
 
         // Separator line
         ctx.strokeStyle = '#cccccc';
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(this.scaleValue(40), yPos + this.scaleValue(5));
-        ctx.lineTo(this.scaleValue(360), yPos + this.scaleValue(5));
+        ctx.moveTo(this.scaleValue(55), yPos + this.scaleValue(5));
+        ctx.lineTo(this.scaleValue(345), yPos + this.scaleValue(5));
         ctx.stroke();
 
         // Value
         ctx.fillStyle = '#000000';
         ctx.font = `${this.scaleValue(10)}px Outfit, Arial`;
         ctx.textAlign = 'right';
-        ctx.fillText(detail.value, this.scaleValue(360), yPos);
+        ctx.fillText(detail.value, this.scaleValue(330), yPos);
 
         yPos += this.scaleValue(35);
       });
