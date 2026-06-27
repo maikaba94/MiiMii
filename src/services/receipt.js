@@ -76,141 +76,128 @@ class ReceiptService {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
 
-      // Load custom receipt template
-const receiptTemplate = await loadImage(
-    path.join(this.logoPath, 'receipt-template.png')
-);
+      // Set background
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, this.scaleValue(400), this.scaleValue(600));
 
-// Draw the template to cover the entire canvas
-ctx.drawImage(
-    receiptTemplate,
-    0,
-    0,
-    canvas.width,
-    canvas.height
-);
-      
-      
+      // Header
+      ctx.fillStyle = '#ff0000';
+      ctx.fillRect(0, 0, this.scaleValue(400), this.scaleValue(80));
 
-      
-      
-      
+      // Load and draw logo
+      const logo = await this.loadLogo();
+      if (logo) {
+        // Calculate logo dimensions to fit in header
+        const logoSize = this.scaleValue(40);
+        const logoX = this.scaleValue(30);
+        const logoY = this.scaleValue(20);
+        ctx.drawImage(logo, logoX, logoY, logoSize, logoSize);
+      } else {
+        // Logo placeholder (red swirl)
+        ctx.fillStyle = '#ff6666';
+        ctx.beginPath();
+        ctx.arc(this.scaleValue(50), this.scaleValue(40), this.scaleValue(20), 0, 2 * Math.PI);
+        ctx.fill();
+      }
 
-      
-      
-      
-        
-        
-        
-        
-        
-      
-      
-        
-        
-        
-        
-      
+      // MiiMii.AI title
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `bold ${this.scaleValue(24)}px Outfit, Arial`;
+      ctx.textAlign = 'center';
+      ctx.fillText('MiiMii.AI', this.scaleValue(200), this.scaleValue(35));
 
-      
-      
-      
-      
-      
+      // Transaction Receipt title
+      ctx.fillStyle = '#000000';
+      ctx.font = `bold italic ${this.scaleValue(28)}px Outfit, Arial`;
+      ctx.textAlign = 'center';
+      ctx.fillText('Transaction Receipt', this.scaleValue(200), this.scaleValue(120));
 
-    
-  
-    
-    
-    
+      // Generated date
+      ctx.font = `${this.scaleValue(12)}px Outfit, Arial`;
+      ctx.fillStyle = '#666666';
+      ctx.fillText(`Generated from The MiiMii AI on ${date}`, this.scaleValue(200), this.scaleValue(140));
 
-    
-    
-    
+      // Content area background
+      ctx.fillStyle = '#f0f8f0';
+      ctx.fillRect(this.scaleValue(20), this.scaleValue(160), this.scaleValue(360), this.scaleValue(320));
 
+      // Transaction details
+      const details = [
+        { label: 'Transaction Amount', value: `₦ ${parseFloat(amount).toLocaleString()}.00` },
+        { label: 'Transaction Type', value: transactionType || 'Bank Transfer' },
+        { label: 'Transaction Date', value: date },
+        { label: 'Sender', value: sender || 'N/A' },
+        { label: 'Beneficiary', value: beneficiary || 'N/A' },
+        { label: 'Bank', value: transactionData.recipientBank || 'Rubies MFB' },
+        { label: 'Remark', value: remark || 'N/A' },
+        { label: 'Transaction Fee', value: `₦ ${parseFloat(charges || 0).toLocaleString()}.00` },
+        { label: 'Transaction Reference', value: reference },
+        { label: 'Transaction Status', value: status }
+      ];
 
-    
-    
-    
+      let yPos = this.scaleValue(180);
+      details.forEach((detail, index) => {
+        // Label
+        ctx.fillStyle = '#333333';
+        ctx.font = `bold ${this.scaleValue(10)}px Outfit, Arial`;
+        ctx.textAlign = 'left';
+        ctx.fillText(detail.label, this.scaleValue(40), yPos);
 
-    
-    
-      
-        
-      
-      
-    
-      
-      
-    
-      
-      
-    
+        // Separator line
+        ctx.strokeStyle = '#cccccc';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(this.scaleValue(40), yPos + this.scaleValue(5));
+        ctx.lineTo(this.scaleValue(360), yPos + this.scaleValue(5));
+        ctx.stroke();
 
-    
-        
-        
-        
-        
-        
+        // Value
+        ctx.fillStyle = '#000000';
+        ctx.font = `${this.scaleValue(10)}px Outfit, Arial`;
+        ctx.textAlign = 'right';
+        ctx.fillText(detail.value, this.scaleValue(360), yPos);
 
-      
-      
-        
-        
-        
-        
-        
+        yPos += this.scaleValue(35);
+      });
 
+      // Footer - Short contact info
+      ctx.fillStyle = '#666666';
+      ctx.font = `${this.scaleValue(9)}px Outfit, Arial`;
+      ctx.textAlign = 'center';
+      ctx.fillText('Support: contactcenter@chatmiimii.com', this.scaleValue(200), this.scaleValue(520));
 
-      
-        
-        
-      
+      // Red line
+      ctx.strokeStyle = '#ff0000';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(this.scaleValue(50), this.scaleValue(540));
+      ctx.lineTo(this.scaleValue(350), this.scaleValue(540));
+      ctx.stroke();
 
-        
-    
+      // Brand message
+      ctx.fillStyle = '#000000';
+      ctx.font = `${this.scaleValue(9)}px Outfit, Arial`;
+      ctx.textAlign = 'center';
+      const brandMessage = 'MiiMii is powered by a CBN licensed partner and insured by NDIC. Send money, buy airtime, buy data, pay your bills and cable subscription with just a chat all inside whatsapp';
+      // Split into multiple lines if needed (max ~50 chars per line)
+      const words = brandMessage.split(' ');
+      let line = '';
+      yPos = this.scaleValue(560); // Reuse existing yPos variable
+      words.forEach((word, index) => {
+        const testLine = line + word + ' ';
+        if (testLine.length > 50 && line.length > 0) {
+          ctx.fillText(line.trim(), this.scaleValue(200), yPos);
+          line = word + ' ';
+          yPos += this.scaleValue(15);
+        } else {
+          line = testLine;
+        }
+      });
+      if (line.trim().length > 0) {
+        ctx.fillText(line.trim(), this.scaleValue(200), yPos);
+      }
 
-      
-      
-    
-    
-
-// Transaction details on custom template
-
-ctx.fillStyle = "#000000";
-ctx.font = `bold ${this.scaleValue(12)}px Outfit, Arial`;
-ctx.textAlign = "left";
-
-ctx.fillText(`Sender: ${sender || "N/A"}`, this.scaleValue(55), this.scaleValue(185));
-
-ctx.fillText(`Recipient: ${beneficiary || "N/A"}`, this.scaleValue(55), this.scaleValue(225));
-
-ctx.fillText(
-    `Recipient Bank: ${transactionData.recipientBank || "N/A"}`,
-    this.scaleValue(55),
-    this.scaleValue(265)
-
-
-ctx.fillText(
-    `Recipient Account: ${transactionData.recipientAccount || "N/A"}`,
-    this.scaleValue(55),
-    this.scaleValue(305)
-
-
-ctx.fillText(
-    `Reference: ${reference}`,
-    this.scaleValue(55),
-    this.scaleValue(345)
-
-
-ctx.fillText(
-    `ID: ${transactionData.id || reference}`,
-    this.scaleValue(55),
-    this.scaleValue(385)
-
-
-  // Convert to buffer
+      // Convert to buffer
       const buffer = canvas.toBuffer('image/jpeg', { quality: 1.0 });
       
       // Validate the generated buffer
@@ -224,14 +211,14 @@ ctx.fillText(
         transactionType,
         amount,
         bufferSize: `${bufferSizeInKB.toFixed(2)}KB`
-      
+      });
 
       return buffer;
     } catch (error) {
       logger.error('Failed to generate receipt', { error: error.message, transactionData });
       throw error;
-    
-  
+    }
+  }
 
   async generateAirtimeReceipt(transactionData) {
     try {
@@ -275,7 +262,7 @@ ctx.fillText(
         ctx.beginPath();
         ctx.arc(this.scaleValue(50), this.scaleValue(40), this.scaleValue(20), 0, 2 * Math.PI);
         ctx.fill();
-      
+      }
 
       // MiiMii.AI title
       ctx.fillStyle = '#ffffff';
