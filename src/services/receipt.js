@@ -133,8 +133,7 @@ ctx.drawImage(
     
     
 
-      // Transaction details
-const details = [
+    
     
       
         
@@ -191,25 +190,25 @@ ctx.fillText(
     `Recipient Bank: ${transactionData.recipientBank || "N/A"}`,
     this.scaleValue(55),
     this.scaleValue(265)
-);
+
 
 ctx.fillText(
     `Recipient Account: ${transactionData.recipientAccount || "N/A"}`,
     this.scaleValue(55),
     this.scaleValue(305)
-);
+
 
 ctx.fillText(
     `Reference: ${reference}`,
     this.scaleValue(55),
     this.scaleValue(345)
-);
+
 
 ctx.fillText(
     `ID: ${transactionData.id || reference}`,
     this.scaleValue(55),
     this.scaleValue(385)
-);
+
 
   // Convert to buffer
       const buffer = canvas.toBuffer('image/jpeg', { quality: 1.0 });
@@ -225,14 +224,14 @@ ctx.fillText(
         transactionType,
         amount,
         bufferSize: `${bufferSizeInKB.toFixed(2)}KB`
-      });
+      
 
       return buffer;
     } catch (error) {
       logger.error('Failed to generate receipt', { error: error.message, transactionData });
       throw error;
-    }
-  }
+    
+  
 
   async generateAirtimeReceipt(transactionData) {
     try {
@@ -276,7 +275,7 @@ ctx.fillText(
         ctx.beginPath();
         ctx.arc(this.scaleValue(50), this.scaleValue(40), this.scaleValue(20), 0, 2 * Math.PI);
         ctx.fill();
-      }
+      
 
       // MiiMii.AI title
       ctx.fillStyle = '#ffffff';
