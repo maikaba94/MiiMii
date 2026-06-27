@@ -76,9 +76,17 @@ class ReceiptService {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
 
-      // Set background
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, this.scaleValue(400), this.scaleValue(600));
+      const receiptTemplate = await loadImage(
+  path.join(this.logoPath, 'receipt-template.png')
+);
+
+ctx.drawImage(
+  receiptTemplate,
+  0,
+  0,
+  canvas.width,
+  canvas.height
+);
 
       // Header
       ctx.fillStyle = '#ff0000';
