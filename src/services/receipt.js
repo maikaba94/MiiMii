@@ -88,47 +88,6 @@ ctx.drawImage(
   canvas.height
 );
 
-      // Header
-      ctx.fillStyle = '#ff0000';
-      ctx.fillRect(0, 0, this.scaleValue(400), this.scaleValue(80));
-
-      // Load and draw logo
-      const logo = await this.loadLogo();
-      if (logo) {
-        // Calculate logo dimensions to fit in header
-        const logoSize = this.scaleValue(40);
-        const logoX = this.scaleValue(30);
-        const logoY = this.scaleValue(20);
-        ctx.drawImage(logo, logoX, logoY, logoSize, logoSize);
-      } else {
-        // Logo placeholder (red swirl)
-        ctx.fillStyle = '#ff6666';
-        ctx.beginPath();
-        ctx.arc(this.scaleValue(50), this.scaleValue(40), this.scaleValue(20), 0, 2 * Math.PI);
-        ctx.fill();
-      }
-
-      // MiiMii.AI title
-      ctx.fillStyle = '#ffffff';
-      ctx.font = `bold ${this.scaleValue(24)}px Outfit, Arial`;
-      ctx.textAlign = 'center';
-      ctx.fillText('MiiMii.AI', this.scaleValue(200), this.scaleValue(35));
-
-      // Transaction Receipt title
-      ctx.fillStyle = '#000000';
-      ctx.font = `bold italic ${this.scaleValue(28)}px Outfit, Arial`;
-      ctx.textAlign = 'center';
-      ctx.fillText('Transaction Receipt', this.scaleValue(200), this.scaleValue(120));
-
-      // Generated date
-      ctx.font = `${this.scaleValue(12)}px Outfit, Arial`;
-      ctx.fillStyle = '#666666';
-      ctx.fillText(`Generated from The MiiMii AI on ${date}`, this.scaleValue(200), this.scaleValue(140));
-
-      // Content area background
-      ctx.fillStyle = '#f0f8f0';
-      ctx.fillRect(this.scaleValue(20), this.scaleValue(160), this.scaleValue(360), this.scaleValue(320));
-
       // Transaction details
       const details = [
         { label: 'Transaction Amount', value: `₦ ${parseFloat(amount).toLocaleString()}.00` },
