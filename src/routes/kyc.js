@@ -166,7 +166,46 @@ router.post('/verify-bvn',
     }
   }
 );
+// Verify NIN
+router.post('/verify-nin',
+  body('phoneNumber').isMobilePhone('any'),
+  body('nin').isLength({ min: 11, max: 11 }).isNumeric(),
+  validateRequest,
+  async (req, res) => {
+    try {
+      const { phoneNumber, nin } = req.body;
 
+      const user = await userService.getUserByPhoneNumber(phoneNumber);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      const result = await kycService.validateNIN({
+        nin,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        dateOfBirth: user.dateOfBirth,
+        userId: user.id
+      });
+
+      res.json({
+        success: true,
+        message: 'NIN verification completed',
+        verified: true,
+        details: result.data
+      });
+
+    } catch (error) {
+      logger.error('Failed to verify NIN', {
+        error: error.message
+      });
+
+      res.status(500).json({
+        error: error.message
+      });
+    }
+  }
+);
 // Submit KYC documents
 router.post('/submit-documents',
   body('phoneNumber').isMobilePhone('any'),
