@@ -286,26 +286,32 @@ router.post('/kyc/start',
   body('dateOfBirth').isISO8601(),
   body('gender').isIn(['male', 'female']),
   body('address').notEmpty(),
-  body('bvn').isLength({ min: 11, max: 11 }).isNumeric(),
+  body('bvn').optional().isLength({ min: 11, max: 11 }).isNumeric(),
+body('nin').optional().isLength({ min: 11, max: 11 }).isNumeric(),
   validateRequest,
   async (req, res) => {
     try {
       const { phoneNumber, firstName, lastName, middleName, dateOfBirth, gender, address, bvn } = req.body;
-      
+      if (!bvn && !nin) {
+  return res.status(400).json({
+    error: 'Either BVN or NIN is required'
+  });
+      }
       const user = await userService.getUserByPhoneNumber(phoneNumber);
       if (!user) {
         return res.status(404).json({ error: 'User not found. Please register first.' });
       }
 
       const result = await kycService.startKycProcess(user, phoneNumber, {
-        firstName,
-        lastName,
-        middleName,
-        dateOfBirth,
-        gender,
-        address,
-        bvn
-      });
+  firstName,
+  lastName,
+ middleName,
+  dateOfBirth,
+  gender,
+  address,
+  bvn,
+  nin
+});
 
       res.json({
         success: true,
