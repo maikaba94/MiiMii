@@ -291,7 +291,17 @@ body('nin').optional().isLength({ min: 11, max: 11 }).isNumeric(),
   validateRequest,
   async (req, res) => {
     try {
-      const { phoneNumber, firstName, lastName, middleName, dateOfBirth, gender, address, bvn } = req.body;
+      const {
+  phoneNumber,
+  firstName,
+  lastName,
+  middleName,
+  dateOfBirth,
+  gender,
+  address,
+  bvn,
+  nin
+} = req.body;
       if (!bvn && !nin) {
   return res.status(400).json({
     error: 'Either BVN or NIN is required'
