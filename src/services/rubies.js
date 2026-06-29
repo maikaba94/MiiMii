@@ -255,7 +255,59 @@ class RubiesService {
       }
     }
   }
+async validateNIN(ninData) {
+  try {
+    const {
+      nin,
+      firstName,
+      lastName,
+      dateOfBirth,
+      userId
+    } = ninData;
 
+    if (!nin || !/^\d{11}$/.test(nin)) {
+      throw new Error("Invalid NIN");
+    }
+
+    const payload = {
+      idNumber: nin,
+      firstName,
+      lastName,
+      dob: dateOfBirth
+        ? this.formatDateForRubies(dateOfBirth)
+        : undefined,
+      reference: `NIN_${Date.now()}_${userId || "unknown"}`
+    };
+
+    Object.keys(payload).forEach(
+      key => payload[key] === undefined && delete payload[key]
+    );
+
+    const response = await this.makeRequest(
+      "POST",
+      "/baas-kyc/nin-validation",
+      payload
+    );
+
+    if (response.responseCode === "00") {
+      return {
+        success: true,
+        data: response,
+        responseCode: response.responseCode,
+        responseMessage: response.responseMessage
+      };
+    }
+
+    throw new Error(response.responseMessage);
+
+  } catch (error) {
+    logger.error("Rubies NIN validation failed", {
+      error: error.message
+    });
+
+    throw error;
+  }
+}
   // Virtual Account Service - Based on baas-virtual-account section
   async createVirtualAccount(userData) {
     try {
