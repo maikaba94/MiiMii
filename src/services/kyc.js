@@ -29,7 +29,7 @@ class KYCService {
 
   async startKycProcess(user, phoneNumber, kycData, extractedData = null) {
     try {
-      const { firstName, lastName, middleName, dateOfBirth, gender, address, bvn } = kycData;
+      const { firstName, lastName, middleName, dateOfBirth, gender, address, bvn, nin, } = kycData;
       
       logger.info('Starting KYC process', { 
         userId: user.id, 
@@ -46,6 +46,7 @@ class KYCService {
         gender,
         address,
         bvn,
+        nin,
         kycStatus: 'pending',
         kycData: {
           submittedAt: new Date(),
@@ -66,13 +67,29 @@ class KYCService {
       });
 
       // Start BVN verification with Rubies before other verifications
-      const bvnVerification = await this.verifyBVNWithRubies(bvn, {
-        firstName,
-        lastName,
-        dateOfBirth,
-        phoneNumber,
-        userId: user.id
-      });
+      let bvnVerification;
+
+if (bvn) {
+  bvnVerification = await this.verifyBVNWithRubies(bvn, {
+    firstName,
+    lastName,
+    dateOfBirth,
+    phoneNumber,
+    userId: user.id
+  });
+} else if (nin) {
+  bvnVerification = await rubiesService.validateNIN({
+    nin,
+    firstName,
+    lastName,
+    dateOfBirth,
+    userId: user.id
+  });
+
+  bvnVerification.verified = bvnVerification.success === true;
+} else {
+  throw new Error('Either BVN or NIN is required');
+}
 
       // Update user with BVN verification result
       await userService.updateUser(user.id, {
